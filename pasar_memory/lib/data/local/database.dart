@@ -9,7 +9,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('pasar_memory.db');
+    _database = await _initDB('pasar_memory_v2.db');
     return _database!;
   }
 
@@ -17,92 +17,106 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path, 
+      version: 1, 
+      onCreate: _createDB,
+    );
   }
 
   Future _createDB(Database db, int version) async {
+    const textType = 'TEXT NOT NULL';
+    const boolType = 'INTEGER NOT NULL';
+    const realType = 'REAL NOT NULL';
+    const idType = 'TEXT PRIMARY KEY';
+
+    // 1.1.2 Merchant Profile
     await db.execute('''
       CREATE TABLE merchants (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        businessType TEXT NOT NULL,
-        createdAt TEXT NOT NULL
+        id $idType,
+        name $textType,
+        businessType $textType,
+        createdAt $textType
       )
     ''');
-    
+
+    // 1.1.3 Menu Items & Aliases
     await db.execute('''
       CREATE TABLE menu_items (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        price REAL NOT NULL,
-        isActive INTEGER NOT NULL
+        id $idType,
+        name $textType,
+        price $realType,
+        isActive $boolType
       )
     ''');
 
+    // 1.1.4 Daily Evidence (Screenshots, Audio, Exports)
     await db.execute('''
-      CREATE TABLE order_events (
-        id TEXT PRIMARY KEY,
-        items TEXT NOT NULL,
-        totalAmount REAL NOT NULL,
-        timestamp TEXT NOT NULL,
-        status TEXT NOT NULL
+      CREATE TABLE daily_evidence (
+        id $idType,
+        type $textType, 
+        filePath $textType,
+        timestamp $textType
       )
     ''');
 
+    // 1.1.5 Extraction Results (OCR & Export Parsing)
     await db.execute('''
-      CREATE TABLE payment_evidences (
-        id TEXT PRIMARY KEY,
-        imagePath TEXT NOT NULL,
-        importedAt TEXT NOT NULL
+      CREATE TABLE extraction_records (
+        id $idType,
+        evidenceId $textType,
+        rawText $textType,
+        amount $realType,
+        referenceNumber $textType,
+        confidence $realType,
+        status $textType
       )
     ''');
 
+    // 1.1.6 Transcript Records & Parsed Recaps
     await db.execute('''
-      CREATE TABLE payment_events (
-        id TEXT PRIMARY KEY,
-        evidenceId TEXT NOT NULL,
-        amount REAL NOT NULL,
-        timestamp TEXT NOT NULL,
-        providerName TEXT NOT NULL,
-        referenceNumber TEXT NOT NULL,
-        rawText TEXT NOT NULL,
-        extractionConfidence REAL NOT NULL,
-        status TEXT NOT NULL
+      CREATE TABLE transcript_records (
+        id $idType,
+        evidenceId $textType,
+        rawText $textType,
+        parsedJson $textType,
+        confidence $realType
       )
     ''');
 
+    // 1.1.7 Daily Ledger
     await db.execute('''
-      CREATE TABLE match_records (
-        id TEXT PRIMARY KEY,
-        paymentEventId TEXT NOT NULL,
-        orderEventId TEXT NOT NULL,
-        confidenceScore REAL NOT NULL,
-        reasons TEXT NOT NULL,
-        matchedAt TEXT NOT NULL,
-        isManualCorrection INTEGER NOT NULL
+      CREATE TABLE daily_ledgers (
+        id $idType,
+        date $textType,
+        totalSales $realType,
+        digitalTotal $realType,
+        cashEstimate $realType,
+        unresolvedCount INTEGER NOT NULL,
+        isConfirmed $boolType
       )
     ''');
 
+    // 1.1.8 Correction Records
     await db.execute('''
       CREATE TABLE correction_records (
-        id TEXT PRIMARY KEY,
-        matchRecordId TEXT NOT NULL,
-        oldOrderEventId TEXT NOT NULL,
-        newOrderEventId TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        correctedAt TEXT NOT NULL
+        id $idType,
+        dayId $textType,
+        fieldName $textType,
+        oldValue $textType,
+        newValue $textType,
+        reason $textType,
+        timestamp $textType
       )
     ''');
 
+    // Tap Entries (Quick input during selling)
     await db.execute('''
-      CREATE TABLE daily_summaries (
-        id TEXT PRIMARY KEY,
-        date TEXT NOT NULL,
-        totalSales REAL NOT NULL,
-        digitalTotal REAL NOT NULL,
-        cashEstimate REAL NOT NULL,
-        unresolvedCount INTEGER NOT NULL,
-        isConfirmed INTEGER NOT NULL
+      CREATE TABLE tap_entries (
+        id $idType,
+        menuItemId $textType,
+        timestamp $textType,
+        amount $realType
       )
     ''');
   }
