@@ -4,7 +4,7 @@ part 'payment_event.freezed.dart';
 part 'payment_event.g.dart';
 
 @freezed
-class PaymentEvent with _$PaymentEvent {
+abstract class PaymentEvent with _$PaymentEvent {
   const factory PaymentEvent({
     required String id,
     required String evidenceId,

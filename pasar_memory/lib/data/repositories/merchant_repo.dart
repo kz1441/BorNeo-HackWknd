@@ -19,9 +19,14 @@ class MerchantRepository {
     );
   }
 
-  Future<Merchant?> getMerchant() async {
+  Future<Merchant?> getMerchant({String? accountId}) async {
     final db = await _dbHelper.database;
-    final maps = await db.query('merchants', limit: 1);
+    final maps = await db.query(
+      'merchants',
+      where: accountId == null || accountId.isEmpty ? null : 'id = ?',
+      whereArgs: accountId == null || accountId.isEmpty ? null : [accountId],
+      limit: 1,
+    );
 
     if (maps.isNotEmpty) {
       final map = maps.first;

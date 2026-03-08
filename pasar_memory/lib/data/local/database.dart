@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static const _databaseVersion = 3;
 
   DatabaseHelper._init();
 
@@ -18,21 +19,36 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
 
     return await openDatabase(
-      path, 
-      version: 1, 
+      path,
+      version: _databaseVersion,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
+      onOpen: _ensureSchema,
     );
   }
 
   Future _createDB(Database db, int version) async {
+    await _createTables(db);
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    await _createTables(db);
+  }
+
+  Future<void> _ensureSchema(Database db) async {
+    await _createTables(db);
+  }
+
+  Future<void> _createTables(Database db) async {
     const textType = 'TEXT NOT NULL';
     const boolType = 'INTEGER NOT NULL';
     const realType = 'REAL NOT NULL';
     const idType = 'TEXT PRIMARY KEY';
+    const accountType = "TEXT NOT NULL DEFAULT ''";
 
     // 1.1.2 Merchant Profile
     await db.execute('''
-      CREATE TABLE merchants (
+      CREATE TABLE IF NOT EXISTS merchants (
         id $idType,
         name $textType,
         businessType $textType,
@@ -42,8 +58,9 @@ class DatabaseHelper {
 
     // 1.1.3 Menu Items & Aliases
     await db.execute('''
-      CREATE TABLE menu_items (
+      CREATE TABLE IF NOT EXISTS menu_items (
         id $idType,
+        accountId $accountType,
         name $textType,
         price $realType,
         isActive $boolType
@@ -52,8 +69,9 @@ class DatabaseHelper {
 
     // 1.1.4 Daily Evidence (Screenshots, Audio, Exports)
     await db.execute('''
-      CREATE TABLE daily_evidence (
+      CREATE TABLE IF NOT EXISTS daily_evidence (
         id $idType,
+        accountId $accountType,
         type $textType, 
         filePath $textType,
         timestamp $textType
@@ -62,8 +80,9 @@ class DatabaseHelper {
 
     // 1.1.5 Extraction Results (OCR & Export Parsing)
     await db.execute('''
-      CREATE TABLE extraction_records (
+      CREATE TABLE IF NOT EXISTS extraction_records (
         id $idType,
+        accountId $accountType,
         evidenceId $textType,
         rawText $textType,
         amount $realType,
@@ -75,8 +94,9 @@ class DatabaseHelper {
 
     // 1.1.6 Transcript Records & Parsed Recaps
     await db.execute('''
-      CREATE TABLE transcript_records (
+      CREATE TABLE IF NOT EXISTS transcript_records (
         id $idType,
+        accountId $accountType,
         evidenceId $textType,
         rawText $textType,
         parsedJson $textType,
@@ -86,8 +106,9 @@ class DatabaseHelper {
 
     // 1.1.7 Daily Ledger
     await db.execute('''
-      CREATE TABLE daily_ledgers (
+      CREATE TABLE IF NOT EXISTS daily_ledgers (
         id $idType,
+        accountId $accountType,
         date $textType,
         totalSales $realType,
         digitalTotal $realType,
@@ -99,8 +120,9 @@ class DatabaseHelper {
 
     // 1.1.8 Correction Records
     await db.execute('''
-      CREATE TABLE correction_records (
+      CREATE TABLE IF NOT EXISTS correction_records (
         id $idType,
+        accountId $accountType,
         dayId $textType,
         fieldName $textType,
         oldValue $textType,
@@ -112,17 +134,36 @@ class DatabaseHelper {
 
     // Tap Entries (Quick input during selling)
     await db.execute('''
-      CREATE TABLE tap_entries (
+      CREATE TABLE IF NOT EXISTS tap_entries (
         id $idType,
+        accountId $accountType,
         menuItemId $textType,
         timestamp $textType,
         amount $realType
       )
     ''');
+
+    await _ensureColumn(db, 'menu_items', 'accountId', accountType);
+    await _ensureColumn(db, 'daily_evidence', 'accountId', accountType);
+    await _ensureColumn(db, 'extraction_records', 'accountId', accountType);
+    await _ensureColumn(db, 'transcript_records', 'accountId', accountType);
+    await _ensureColumn(db, 'daily_ledgers', 'accountId', accountType);
+    await _ensureColumn(db, 'correction_records', 'accountId', accountType);
+    await _ensureColumn(db, 'tap_entries', 'accountId', accountType);
+  }
+
+  Future<void> _ensureColumn(Database db, String tableName, String columnName, String declaration) async {
+    final tableInfo = await db.rawQuery('PRAGMA table_info($tableName)');
+    final hasColumn = tableInfo.any((row) => row['name'] == columnName);
+    if (hasColumn) {
+      return;
+    }
+
+    await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $declaration');
   }
 
   Future close() async {
     final db = await instance.database;
-    db.close();
+    await db.close();
   }
 }

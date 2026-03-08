@@ -17,7 +17,7 @@ class EvidenceSourceChip extends StatelessWidget {
         icon = Icons.image;
         break;
       default:
-        icon = Icons.Description;
+        icon = Icons.description;
     }
 
     return ActionChip(

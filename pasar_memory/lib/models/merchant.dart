@@ -4,7 +4,7 @@ part 'merchant.freezed.dart';
 part 'merchant.g.dart';
 
 @freezed
-class Merchant with _$Merchant {
+abstract class Merchant with _$Merchant {
   const factory Merchant({
     required String id,
     required String name,

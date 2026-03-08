@@ -4,7 +4,7 @@ part 'correction_record.freezed.dart';
 part 'correction_record.g.dart';
 
 @freezed
-class CorrectionRecord with _$CorrectionRecord {
+abstract class CorrectionRecord with _$CorrectionRecord {
   const factory CorrectionRecord({
     required String id,
     required String matchRecordId,

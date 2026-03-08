@@ -4,7 +4,7 @@ part 'match_record.freezed.dart';
 part 'match_record.g.dart';
 
 @freezed
-class MatchRecord with _$MatchRecord {
+abstract class MatchRecord with _$MatchRecord {
   const factory MatchRecord({
     required String id,
     required String paymentEventId,

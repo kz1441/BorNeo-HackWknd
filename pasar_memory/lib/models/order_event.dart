@@ -5,7 +5,7 @@ part 'order_event.freezed.dart';
 part 'order_event.g.dart';
 
 @freezed
-class OrderEvent with _$OrderEvent {
+abstract class OrderEvent with _$OrderEvent {
   const factory OrderEvent({
     required String id,
     required List<MenuItem> items,

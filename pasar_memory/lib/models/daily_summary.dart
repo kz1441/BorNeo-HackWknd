@@ -4,7 +4,7 @@ part 'daily_summary.freezed.dart';
 part 'daily_summary.g.dart';
 
 @freezed
-class DailySummary with _$DailySummary {
+abstract class DailySummary with _$DailySummary {
   const factory DailySummary({
     required String id,
     required DateTime date,

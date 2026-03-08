@@ -10,9 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  google_fonts: ^6.3.1
+  shared_preferences: ^2.5.3
   flutter_riverpod:
   go_router:
   sqflite:
+  sqflite_common_ffi:
+  sqflite_common_ffi_web:
   path:
   dio:
   freezed_annotation:
