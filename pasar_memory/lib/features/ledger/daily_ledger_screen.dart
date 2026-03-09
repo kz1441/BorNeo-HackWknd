@@ -9,6 +9,9 @@ import '../../services/reconciliation/reconciliation_engine.dart';
 import '../auth/session_provider.dart';
 import '../cash_entry/cash_entry_provider.dart';
 import '../evidence/evidence_provider.dart';
+import '../memory/history_provider.dart';
+import '../review/recap_draft_provider.dart';
+import '../review/recap_review_provider.dart';
 import '../selling/selling_provider.dart';
 import '../voice_recap/voice_provider.dart';
 import '../../shared/theme/app_theme.dart';
@@ -237,6 +240,18 @@ class DailyLedgerScreen extends ConsumerWidget {
                           'unresolvedCount': evidenceState.statusById.values.where((status) => status == EvidenceProcessingStatus.error).length,
                           'isConfirmed': 1,
                         }, accountId: accountId);
+
+                        // Reset all day-session providers so every page starts fresh
+                        ref.read(sellingProvider.notifier).resetAll();
+                        ref.read(cashEntryProvider.notifier).reset();
+                        ref.read(voiceProvider.notifier).reset();
+                        ref.read(evidenceProvider.notifier).reset();
+                        ref.read(recapDraftProvider.notifier).resetTranscript();
+                        ref.read(recapReviewProvider.notifier).reset();
+
+                        // Refresh memory timeline so the new entry appears immediately
+                        await ref.read(historyProvider.notifier).refresh();
+
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context)
                           ..hideCurrentSnackBar()

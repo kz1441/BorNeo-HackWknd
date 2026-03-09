@@ -357,15 +357,79 @@ class VoiceController extends Notifier<VoiceState> {
         return;
       }
 
+      // Always supplement with the local rule-based parser:
+      //  • When Gemini found NO items — use all local items.
+      //  • When Gemini found items but may have defaulted to qty=1 — the local
+      //    parser searches for explicit numbers directly after the item name in
+      //    the transcript, so use its quantity whenever it is higher.
+      var finalRecap = result.parsedRecap;
+      if (menuItems.isNotEmpty) {
+        try {
+          final localParser = MenuAwareParser();
+          final localRecap = localParser.parse(
+            result.correctedTranscript ?? transcript,
+            menuItems,
+          );
+
+          if (localRecap.items.isNotEmpty) {
+            if (finalRecap.items.isEmpty) {
+              // Gemini found no items — fall back to all local items
+              finalRecap = ParsedRecap(
+                items: localRecap.items,
+                cashMention: finalRecap.cashMention ?? localRecap.cashMention,
+                soldOutItems: finalRecap.soldOutItems.isNotEmpty
+                    ? finalRecap.soldOutItems
+                    : localRecap.soldOutItems,
+                paymentModeHint:
+                    finalRecap.paymentModeHint ?? localRecap.paymentModeHint,
+                rawTranscript: finalRecap.rawTranscript,
+                overallConfidence: ParsedFieldConfidence.medium,
+              );
+            } else {
+              // Gemini found items — correct any under-counted quantities
+              final localQtyMap = {
+                for (final item in localRecap.items) item.menuItemId: item.quantity
+              };
+              final correctedItems = finalRecap.items.map((item) {
+                final localQty = localQtyMap[item.menuItemId];
+                // Prefer the local parser's quantity when it is explicitly
+                // higher (Gemini sometimes defaults to 1 for a stated number)
+                if (localQty != null && localQty > item.quantity) {
+                  return ParsedItemMention(
+                    menuItemId: item.menuItemId,
+                    menuItemName: item.menuItemName,
+                    quantity: localQty,
+                    confidence: item.confidence,
+                    isApproximate: item.isApproximate,
+                    isSoldOut: item.isSoldOut,
+                  );
+                }
+                return item;
+              }).toList();
+              finalRecap = ParsedRecap(
+                items: correctedItems,
+                cashMention: finalRecap.cashMention,
+                soldOutItems: finalRecap.soldOutItems,
+                paymentModeHint: finalRecap.paymentModeHint,
+                rawTranscript: finalRecap.rawTranscript,
+                overallConfidence: finalRecap.overallConfidence,
+              );
+            }
+          }
+        } catch (_) {
+          // local parser failure is non-fatal — keep Gemini's result as-is
+        }
+      }
+
       state = state.copyWith(
-        parsedRecap: result.parsedRecap,
+        parsedRecap: finalRecap,
         recordingState: VoiceRecordingState.done,
         clearUnknownItems: true,
         correctedTranscript: result.correctedTranscript,
         // Replace raw STT transcript with the corrected version for display
         transcript: result.correctedTranscript ?? transcript,
       );
-      _applyParsedItemsToSelling(result.parsedRecap);
+      _applyParsedItemsToSelling(finalRecap);
       return;
     } catch (_) {
       // Gemini unavailable (no internet, quota, etc.) — fall back to local parser

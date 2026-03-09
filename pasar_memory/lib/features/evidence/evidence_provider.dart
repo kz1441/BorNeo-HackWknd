@@ -103,6 +103,11 @@ class EvidenceController extends Notifier<EvidenceState> {
   @override
   EvidenceState build() => const EvidenceState();
 
+  /// Reset all evidence state (called after saving a day to memory)
+  void reset() {
+    state = const EvidenceState();
+  }
+
   int _fnv1a32(List<int> input) {
     var hash = 0x811c9dc5;
     for (final b in input) {

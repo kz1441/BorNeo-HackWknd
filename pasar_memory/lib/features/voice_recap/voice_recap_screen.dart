@@ -492,30 +492,43 @@ class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                   child: FilledButton(
-                    onPressed: () async {
-                      if (voiceState.parsedRecap?.cashMention != null) {
-                        ref.read(spokenCashAmountProvider.notifier).set(
-                              voiceState.parsedRecap!.cashMention!.amount,
-                            );
-                      } else if (voiceState.parsedRecap != null &&
-                          voiceState.parsedRecap!.items.isNotEmpty) {
-                        final menuItems = ref.read(sellingProvider).menuItems;
-                        final prices = {for (final m in menuItems) m.id: m.price};
-                        final estimated = voiceState.parsedRecap!.estimatedTotal(prices);
-                        if (estimated > 0) {
-                          ref.read(spokenCashAmountProvider.notifier).set(estimated);
-                        }
-                      }
+                    onPressed: voiceState.isProcessing
+                        ? null
+                        : () async {
+                            // If the user typed manually but never pressed "Parse Text",
+                            // parse the transcript now before navigating.
+                            if (voiceState.transcript?.isNotEmpty == true &&
+                                !voiceState.isDone &&
+                                !voiceState.isProcessing) {
+                              await voiceController.reparseTranscript();
+                            }
 
-                      if (voiceState.transcript != null) {
-                        recapController.setTranscript(voiceState.transcript!);
-                        recapController.confirmTranscript();
-                      }
+                            // Read latest state after any parsing above
+                            final latestVoice = ref.read(voiceProvider);
 
-                      if (context.mounted) {
-                        context.go('/review');
-                      }
-                    },
+                            if (latestVoice.parsedRecap?.cashMention != null) {
+                              ref.read(spokenCashAmountProvider.notifier).set(
+                                    latestVoice.parsedRecap!.cashMention!.amount,
+                                  );
+                            } else if (latestVoice.parsedRecap != null &&
+                                latestVoice.parsedRecap!.items.isNotEmpty) {
+                              final menuItems = ref.read(sellingProvider).menuItems;
+                              final prices = {for (final m in menuItems) m.id: m.price};
+                              final estimated = latestVoice.parsedRecap!.estimatedTotal(prices);
+                              if (estimated > 0) {
+                                ref.read(spokenCashAmountProvider.notifier).set(estimated);
+                              }
+                            }
+
+                            if (latestVoice.transcript != null) {
+                              recapController.setTranscript(latestVoice.transcript!);
+                              recapController.confirmTranscript();
+                            }
+
+                            if (context.mounted) {
+                              context.go('/review');
+                            }
+                          },
                     child: const Text('Review Recap ->'),
                   ),
                 ),

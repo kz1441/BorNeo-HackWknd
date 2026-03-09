@@ -161,13 +161,11 @@ Rules:
         .where((s) => s.isNotEmpty)
         .toList();
 
-    // Unknown items — merge ordering errors in so user sees both
-    final unknownItems = [
-      ...(json['unknownItems'] as List? ?? [])
-          .map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty),
-      if (orderingError) ...orderingErrorItems,
-    ];
+    // Unknown items — only genuinely unrecognised menu items
+    final unknownItems = (json['unknownItems'] as List? ?? [])
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     // Sold out
     final soldOutItems = (json['soldOutItems'] as List? ?? [])
