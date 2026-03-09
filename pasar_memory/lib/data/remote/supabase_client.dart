@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseClientProvider {
-  static const url = String.fromEnvironment('SUPABASE_URL');
-  static const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const url = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+  static const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
   static bool _initialized = false;
 
   static bool get isConfigured => url.isNotEmpty && anonKey.isNotEmpty;
@@ -19,5 +19,5 @@ class SupabaseClientProvider {
     _initialized = true;
   }
 
-  static final client = Supabase.instance.client;
+  static SupabaseClient get client => Supabase.instance.client;
 }
