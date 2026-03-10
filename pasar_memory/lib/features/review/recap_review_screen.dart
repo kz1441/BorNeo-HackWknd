@@ -23,8 +23,6 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
   late final TextEditingController _notesController;
   late final TextEditingController _cashController;
   late final ProviderSubscription<RecapDraftState> _recapSubscription;
-  late final ProviderSubscription<RecapReviewState> _reviewSubscription;
-  bool _cashManuallyEdited = false;
   // menuItemId → quantity for items the user added manually
   final Map<String, int> _manualItems = {};
 
@@ -56,64 +54,14 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
           ..showSnackBar(SnackBar(content: Text(nextError)));
       }
     });
-    // Recompute cash whenever voice item quantities are edited
-    _reviewSubscription = ref.listenManual<RecapReviewState>(recapReviewProvider, (_, _) {
-      _recomputeCashIfNeeded();
-    });
   }
 
   @override
   void dispose() {
     _recapSubscription.close();
-    _reviewSubscription.close();
     _notesController.dispose();
     _cashController.dispose();
     super.dispose();
-  }
-
-  /// Re-computes the expected total from ALL items and updates the cash field
-  /// unless the user has manually edited it.
-  void _recomputeCashIfNeeded() {
-    if (_cashManuallyEdited) return;
-    final sellingState = ref.read(sellingProvider);
-    final voiceState = ref.read(voiceProvider);
-    final reviewState = ref.read(recapReviewProvider);
-
-    final parsedItems = voiceState.parsedRecap?.items ?? [];
-    final hasVoiceParsed = parsedItems.isNotEmpty;
-
-    double total = 0.0;
-
-    // Voice-parsed items
-    for (final parsedItem in parsedItems) {
-      if (reviewState.rejectedItemIds.contains(parsedItem.menuItemId)) continue;
-      final effectiveQty =
-          reviewState.getEffectiveQuantity(parsedItem.menuItemId, parsedItem.quantity);
-      final matches = sellingState.menuItems.where((m) => m.id == parsedItem.menuItemId);
-      if (matches.isNotEmpty) total += matches.first.price * effectiveQty;
-    }
-
-    // Tapped items (only when no voice-parsed items)
-    if (!hasVoiceParsed) {
-      for (final item in sellingState.menuItems) {
-        final qty = sellingState.countsByMenuItemId[item.id] ?? 0;
-        if (qty > 0) total += item.price * qty;
-      }
-    }
-
-    // Manually added items
-    for (final e in _manualItems.entries) {
-      final matches = sellingState.menuItems.where((m) => m.id == e.key);
-      if (matches.isNotEmpty) total += matches.first.price * e.value;
-    }
-
-    if (total > 0) {
-      final text = total.toStringAsFixed(2);
-      if (_cashController.text != text) {
-        _cashController.text = text;
-        ref.read(cashEntryProvider.notifier).setAmountText(text);
-      }
-    }
   }
 
   @override
@@ -132,7 +80,7 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
         voiceState.parsedRecap?.cashMention?.amount ??
         recap.cashSuggestion ??
         0.0;
-    if (!_cashManuallyEdited && _cashController.text.trim().isEmpty) {
+    if (_cashController.text.trim().isEmpty) {
       _cashController.text = suggestedCash.toStringAsFixed(2);
     }
     
@@ -146,13 +94,14 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
     final hasVoiceParsedItems = parsedItems.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: AppTheme.warmSurface,
+      backgroundColor: AppTheme.deepForest,
       appBar: AppBar(
+        backgroundColor: AppTheme.deepForest,
         leading: IconButton(
           onPressed: () => context.go('/voice-recap'),
-          icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.charcoal),
+          icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.softWhite),
         ),
-        title: Text('Review Recap', style: textTheme.headlineMedium?.copyWith(color: AppTheme.charcoal)),
+        title: Text('Review Recap', style: textTheme.headlineMedium?.copyWith(color: AppTheme.softWhite)),
       ),
       body: SafeArea(
         child: ListView(
@@ -296,15 +245,12 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
                           _manualItems[e.key] = qty - 1;
                         }
                       });
-                      _recomputeCashIfNeeded();
                     },
                     onIncrement: () {
                       setState(() => _manualItems[e.key] = qty + 1);
-                      _recomputeCashIfNeeded();
                     },
                     onToggleReject: () {
                       setState(() => _manualItems.remove(e.key));
-                      _recomputeCashIfNeeded();
                     },
                   ),
                 );
@@ -335,7 +281,6 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
                               hintText: '0.00',
                             ),
                             onChanged: (value) {
-                              _cashManuallyEdited = true;
                               ref.read(cashEntryProvider.notifier).setAmountText(value);
                               reviewController.setCashAmount(double.tryParse(value.trim()));
                             },
@@ -509,7 +454,6 @@ class _RecapReviewScreenState extends ConsumerState<RecapReviewScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => _manualItems[item.id] = 1);
-                      Future.microtask(_recomputeCashIfNeeded);
                     },
                   );
                 },

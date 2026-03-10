@@ -57,13 +57,55 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const Spacer(),
                         Container(
-                          width: 40,
-                          height: 40,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            shape: BoxShape.circle,
+                            color: AppTheme.coral,
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.notifications_none_rounded, color: AppTheme.softWhite),
+                          child: TextButton(
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (dCtx) => AlertDialog(
+                                  title: const Text('Log out?'),
+                                  content: const Text('You will need to log in again to access your account.'),
+                                  actions: [
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        FilledButton(
+                                          onPressed: () => Navigator.of(dCtx).pop(true),
+                                          child: const Text('Log out'),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        OutlinedButton(
+                                          onPressed: () => Navigator.of(dCtx).pop(false),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: AppTheme.coral,
+                                            side: const BorderSide(color: AppTheme.coral),
+                                          ),
+                                          child: const Text('Cancel'),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true && context.mounted) {
+                                await ref.read(sessionProvider.notifier).logout();
+                                if (context.mounted) context.go('/login');
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.softWhite,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Log Out',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -140,44 +182,17 @@ class HomeScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 12),
                     if (visibleItems.isEmpty)
-                      Column(
-                        children: [
-                          GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 1,
-                            children: List.generate(
-                              4,
-                              (index) => const QuickTapButton(
-                                title: 'Tap to add\nmenu items',
-                                icon: Icon(Icons.restaurant_menu_rounded, color: AppTheme.softWhite, size: 24),
-                                count: 0,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: () => context.go('/menu-setup'),
-                              child: const Text('⚙️ Set up menu'),
-                            ),
-                          ),
-                        ],
-                      )
+                      const SizedBox.shrink()
                     else ...[
                       GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: visibleItems.length.clamp(0, 8),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 1,
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.9,
                         ),
                         itemBuilder: (context, index) {
                           final item = visibleItems[index];
@@ -204,11 +219,6 @@ class HomeScreen extends ConsumerWidget {
                     FilledButton(
                       onPressed: () => context.go('/capture'),
                       child: Text(homeState.flowState == DayFlowState.initial ? 'Start End-of-Day Recap ->' : 'Continue Day Flow ->'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () => context.go(homeState.flowState == DayFlowState.readyToReview ? '/review' : '/capture'),
-                      child: Text(homeState.flowState == DayFlowState.readyToReview ? 'Go to Review' : 'View Today\'s Evidence'),
                     ),
                   ],
                 ),
@@ -326,13 +336,23 @@ class HomeScreen extends ConsumerWidget {
                       title: const Text('Log out?'),
                       content: const Text('You will need to log in again to access your account.'),
                       actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(dCtx).pop(false),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(dCtx).pop(true),
-                          child: const Text('Log out'),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            FilledButton(
+                              onPressed: () => Navigator.of(dCtx).pop(true),
+                              child: const Text('Log out'),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton(
+                              onPressed: () => Navigator.of(dCtx).pop(false),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.coral,
+                                side: const BorderSide(color: AppTheme.coral),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

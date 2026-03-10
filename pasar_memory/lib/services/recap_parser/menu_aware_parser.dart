@@ -268,25 +268,40 @@ class MenuAwareParser {
       }
     }
 
+    // Step 1: Collect all (term, item, matchStart, matchEnd) without duplicates.
+    final allCandidates = <(String, MenuItem, int, int)>[];
     for (final entry in searchTerms.entries) {
       final term = entry.key;
       final item = entry.value;
       if (term.isEmpty) continue;
-
-      if (detectedItems.any((d) => d.menuItemId == item.id)) continue;
-
+      if (allCandidates.any((c) => c.$2.id == item.id)) continue;
       final matches = _findTermMatches(normalizedTranscript, term);
       if (matches.isEmpty) continue;
+      final best = matches.first;
+      allCandidates.add((term, item, best.$1, best.$2));
+    }
 
-      final bestMatch = matches.first;
-      final context = _contextWindow(normalizedTranscript, bestMatch.$1, bestMatch.$2, 50);
+    // Step 2: Sort left-to-right so earlier items claim their numbers first.
+    allCandidates.sort((a, b) => a.$3.compareTo(b.$3));
+
+    // Step 3: Process in order, tracking which term ranges have been claimed.
+    final claimedTermRanges = <(int, int)>[];
+    for (final candidate in allCandidates) {
+      final item = candidate.$2;
+      final termStart = candidate.$3;
+      final termEnd = candidate.$4;
+
+      final context = _contextWindow(normalizedTranscript, termStart, termEnd, 50);
 
       final isSoldOut = _soldOutIndicators.hasMatch(context);
       if (isSoldOut) {
         soldOutItems.add(item.name);
       }
 
-      final quantityResult = _extractQuantityNearTerm(normalizedTranscript, bestMatch.$1, bestMatch.$2);
+      final quantityResult = _extractQuantityNearTerm(
+        normalizedTranscript, termStart, termEnd,
+        priorTermRanges: claimedTermRanges,
+      );
       final isApproximate = _approximateIndicators.hasMatch(context);
 
       detectedItems.add(ParsedItemMention(
@@ -298,6 +313,8 @@ class MenuAwareParser {
         isApproximate: isApproximate,
         isSoldOut: isSoldOut,
       ));
+
+      claimedTermRanges.add((termStart, termEnd));
     }
 
     final cashMention = _extractCashMention(normalizedTranscript);
@@ -353,7 +370,9 @@ class MenuAwareParser {
     return text.substring(left, right);
   }
 
-  int? _extractQuantityNearTerm(String transcript, int termStart, int termEnd) {
+  int? _extractQuantityNearTerm(String transcript, int termStart, int termEnd, {
+    List<(int, int)> priorTermRanges = const [],
+  }) {
     // Extract text BEFORE the item term (up to 15 chars before termStart)
     final beforeStart = (termStart - 15).clamp(0, transcript.length);
     final before = transcript.substring(beforeStart, termStart);
@@ -364,6 +383,19 @@ class MenuAwareParser {
 
     final beforeValue = _extractLastSmallNumber(before);
     final afterValue = _extractFirstSmallNumber(after);
+
+    // Targeted before-window check: "cash 32 nasi" pattern.
+    // _isNearCashKeyword has a value<50 guard that misses small cash amounts.
+    // Here we specifically catch cash/tunai/duit DIRECTLY followed by the number.
+    if (beforeValue != null) {
+      final cashDirectlyBeforeNumber = RegExp(
+        r'(?:cash|tunai|wang|duit)\s{0,3}' + RegExp.escape(beforeValue.toString()),
+        caseSensitive: false,
+      );
+      if (cashDirectlyBeforeNumber.hasMatch(before)) {
+        return afterValue;
+      }
+    }
 
     // Check if extracted numbers are near cash keywords - if so, reject them
     if (beforeValue != null && _isNearCashKeyword(transcript, termStart - 15, termStart, beforeValue)) {
@@ -378,8 +410,15 @@ class MenuAwareParser {
     }
 
     // Prefer the value immediately before the term (like "6 nasi kukus")
-    // over the value after (like "nasi kukus 6")
+    // over the value after (like "nasi kukus 6"), UNLESS a prior detected item
+    // sits inside the before-window — in that case the before-number was already
+    // claimed by that item (e.g. "mee 3 nasi 5" → 3 belongs to mee, not nasi).
     if (beforeValue != null && afterValue != null) {
+      final beforeStart = (termStart - 15).clamp(0, transcript.length);
+      final priorTermInWindow = priorTermRanges.any(
+        (r) => r.$2 > beforeStart && r.$2 <= termStart,
+      );
+      if (priorTermInWindow) return afterValue;
       return beforeValue;
     }
     return beforeValue ?? afterValue;

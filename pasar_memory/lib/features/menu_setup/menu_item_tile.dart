@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/menu_item.dart';
+import '../../shared/theme/app_theme.dart';
 
 typedef MenuItemSaveCallback = Future<void> Function({
   required MenuItem item,
@@ -172,6 +173,40 @@ class _MenuItemTileState extends State<MenuItemTile> {
                     onPressed: widget.busy
                         ? null
                         : () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (dCtx) => AlertDialog(
+                                title: const Text('Delete menu item?'),
+                                content: const Text(
+                                  'This action cannot be undone.',
+                                ),
+                                actions: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      OutlinedButton(
+                                        onPressed: () => Navigator.of(dCtx).pop(true),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppTheme.coral,
+                                          side: const BorderSide(color: AppTheme.coral),
+                                        ),
+                                        child: const Text('Delete'),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      OutlinedButton(
+                                        onPressed: () => Navigator.of(dCtx).pop(false),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppTheme.jade,
+                                          side: const BorderSide(color: AppTheme.jade),
+                                        ),
+                                        child: const Text('Cancel'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed != true) return;
                             await widget.onDelete(widget.item.id);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context)

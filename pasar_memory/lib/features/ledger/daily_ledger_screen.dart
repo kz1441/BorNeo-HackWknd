@@ -266,6 +266,19 @@ class DailyLedgerScreen extends ConsumerWidget {
                       'This day will be saved to your business memory timeline.',
                       style: textTheme.bodySmall?.copyWith(color: AppTheme.softWhite.withValues(alpha: 0.65)),
                     ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: () => context.go('/review'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.jade,
+                        side: const BorderSide(color: AppTheme.jade),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      child: const Text(
+                        '← Back to Review',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
                   ],
                 ),
               ),

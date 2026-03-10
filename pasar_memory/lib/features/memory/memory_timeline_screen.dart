@@ -251,10 +251,24 @@ Future<void> _showDeleteDialog(
         style: const TextStyle(color: Color(0xAAF8FBFF)),
       ),
       actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF7A59)),
-          child: const Text('Delete'),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF7A59)),
+              child: const Text('Delete'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFFF7A59),
+                side: const BorderSide(color: Color(0xFFFF7A59)),
+              ),
+              child: const Text('Cancel'),
+            ),
+          ],
         ),
       ],
     ),
@@ -518,13 +532,27 @@ class _EditLedgerSheetState extends ConsumerState<_EditLedgerSheet> {
           style: TextStyle(color: Color(0xAAF8FBFF)),
         ),
         actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFFFB15E), // amber
-              foregroundColor: const Color(0xFF172033), // charcoal
-            ),
-            child: const Text('Save changes'),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFB15E), // amber
+                  foregroundColor: const Color(0xFF172033), // charcoal
+                ),
+                child: const Text('Save changes'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF7A59),
+                  side: const BorderSide(color: Color(0xFFFF7A59)),
+                ),
+                child: const Text('Cancel'),
+              ),
+            ],
           ),
         ],
       ),
@@ -650,7 +678,7 @@ class _EditLedgerSheetState extends ConsumerState<_EditLedgerSheet> {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _evidenceFiles.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
                         itemBuilder: (_, i) {
                           final path = _evidenceFiles[i]['filePath'] as String? ?? '';
                           return ClipRRect(
@@ -660,7 +688,7 @@ class _EditLedgerSheetState extends ConsumerState<_EditLedgerSheet> {
                               width: 120,
                               height: 140,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
+                              errorBuilder: (_, _, _) => Container(
                                 width: 120,
                                 height: 140,
                                 decoration: BoxDecoration(
@@ -743,7 +771,7 @@ class _EditLedgerSheetState extends ConsumerState<_EditLedgerSheet> {
                       Switch(
                         value: _isConfirmed,
                         onChanged: (v) => setState(() => _isConfirmed = v),
-                        activeColor: AppTheme.jade,
+                        activeThumbColor: AppTheme.jade,
                       ),
                     ],
                   ),

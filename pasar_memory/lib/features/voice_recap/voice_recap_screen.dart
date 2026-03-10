@@ -19,17 +19,28 @@ class VoiceRecapScreen extends ConsumerStatefulWidget {
   ConsumerState<VoiceRecapScreen> createState() => _VoiceRecapScreenState();
 }
 
-class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen> {
+class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen>
+    with TickerProviderStateMixin {
   late final TextEditingController _transcriptController;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
     _transcriptController = TextEditingController();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _transcriptController.dispose();
     super.dispose();
   }
@@ -221,24 +232,37 @@ class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen> {
                                   style: textTheme.labelMedium?.copyWith(color: AppTheme.amber),
                                 ),
                                 const Spacer(),
-                                TextButton.icon(
-                                  onPressed: voiceState.isProcessing
-                                      ? null
-                                      : () async {
-                                          final text = _transcriptController.text.trim();
-                                          if (text.isEmpty) {
-                                            ScaffoldMessenger.of(context)
-                                              ..hideCurrentSnackBar()
-                                              ..showSnackBar(
-                                                const SnackBar(content: Text('Please type your recap first.')),
-                                              );
-                                            return;
-                                          }
-                                          voiceController.setTranscript(text);
-                                          await voiceController.reparseTranscript();
-                                        },
-                                  icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-                                  label: const Text('Parse Text'),
+                                ScaleTransition(
+                                  scale: voiceState.isProcessing ? const AlwaysStoppedAnimation(1.0) : _pulseAnimation,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.amber,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: TextButton.icon(
+                                      onPressed: voiceState.isProcessing
+                                          ? null
+                                          : () async {
+                                              final text = _transcriptController.text.trim();
+                                              if (text.isEmpty) {
+                                                ScaffoldMessenger.of(context)
+                                                  ..hideCurrentSnackBar()
+                                                  ..showSnackBar(
+                                                    const SnackBar(content: Text('Please type your recap first.')),
+                                                  );
+                                                return;
+                                              }
+                                              voiceController.setTranscript(text);
+                                              await voiceController.reparseTranscript();
+                                            },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppTheme.charcoal,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      ),
+                                      icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                                      label: const Text('Parse Text', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -471,19 +495,6 @@ class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 16),
-                    if (voiceState.transcript?.isNotEmpty == true)
-                      OutlinedButton(
-                        onPressed: () {
-                          voiceController.reset();
-                          _transcriptController.clear();
-                          ref.read(sellingProvider.notifier).resetAll();
-                          ref.read(recapDraftProvider.notifier).resetTranscript();
-                          ref.read(cashEntryProvider.notifier).reset();
-                          ref.read(recapReviewProvider.notifier).reset();
-                        },
-                        child: const Text('Start Over'),
-                      ),
                     const SizedBox(height: 88),
                   ],
                 ),
@@ -530,6 +541,37 @@ class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen> {
                             }
                           },
                     child: const Text('Review Recap ->'),
+                  ),
+                ),
+              if (voiceState.transcript?.isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.coral,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: TextButton(
+                        onPressed: () {
+                          voiceController.reset();
+                          _transcriptController.clear();
+                          ref.read(sellingProvider.notifier).resetAll();
+                          ref.read(recapDraftProvider.notifier).resetTranscript();
+                          ref.read(cashEntryProvider.notifier).reset();
+                          ref.read(recapReviewProvider.notifier).reset();
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.softWhite,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text(
+                          'Start Over',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               const AppBottomNav(currentRoute: '/voice-recap'),

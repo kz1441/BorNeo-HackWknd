@@ -29,14 +29,24 @@ class EvidenceUploadScreen extends ConsumerStatefulWidget {
   ConsumerState<EvidenceUploadScreen> createState() => _EvidenceUploadScreenState();
 }
 
-class _EvidenceUploadScreenState extends ConsumerState<EvidenceUploadScreen> {
+class _EvidenceUploadScreenState extends ConsumerState<EvidenceUploadScreen>
+    with TickerProviderStateMixin {
   final _picker = ImagePicker();
   bool _didIngestInitialShared = false;
   late final ProviderSubscription<EvidenceState> _evidenceSubscription;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     _evidenceSubscription = ref.listenManual<EvidenceState>(evidenceProvider, (prev, next) {
       final prevWarn = prev?.warningMessage;
@@ -67,6 +77,7 @@ class _EvidenceUploadScreenState extends ConsumerState<EvidenceUploadScreen> {
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _evidenceSubscription.close();
     super.dispose();
   }
@@ -139,6 +150,18 @@ class _EvidenceUploadScreenState extends ConsumerState<EvidenceUploadScreen> {
     if (result == null || result.files.isEmpty) return;
 
     await ref.read(evidenceProvider.notifier).addFromFilePicker(result.files);
+  }
+
+  Future<void> _replaceFile(String id) async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+    );
+    if (!mounted) return;
+    if (result == null || result.files.isEmpty) return;
+    final controller = ref.read(evidenceProvider.notifier);
+    controller.removeFile(id);
+    await controller.addFromFilePicker(result.files);
   }
 
   double _totalExtracted(EvidenceState state) {
@@ -397,22 +420,33 @@ class _EvidenceUploadScreenState extends ConsumerState<EvidenceUploadScreen> {
                                           child: CircularProgressIndicator(strokeWidth: 2.5),
                                         )
                                       else if (status == EvidenceProcessingStatus.done)
-                                        Icon(
-                                          extractedTotal > 0
-                                              ? Icons.check_circle_rounded
-                                              : Icons.info_outline_rounded,
-                                          color: extractedTotal > 0
-                                              ? AppTheme.jade
-                                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                                          size: 24,
-                                        )
+                                        extractedTotal > 0
+                                          ? const Icon(
+                                              Icons.check_circle_rounded,
+                                              color: AppTheme.jade,
+                                              size: 24,
+                                            )
+                                          : const SizedBox.shrink()
                                       else if (status == EvidenceProcessingStatus.error)
                                         const Icon(Icons.error_outline_rounded,
                                             color: AppTheme.coral, size: 24)
                                       else
-                                        TextButton(
-                                          onPressed: () => controller.processFile(f.id),
-                                          child: const Text('Extract'),
+                                        ScaleTransition(
+                                          scale: _pulseAnimation,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.amber,
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: TextButton(
+                                              onPressed: () => controller.processFile(f.id),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: AppTheme.charcoal,
+                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                              ),
+                                              child: const Text('Extract', style: TextStyle(fontWeight: FontWeight.w700)),
+                                            ),
+                                          ),
                                         ),
                                     ],
                                   ),
@@ -467,6 +501,35 @@ class _EvidenceUploadScreenState extends ConsumerState<EvidenceUploadScreen> {
                                     result: result,
                                     onAmountChanged: controller.updateExtractedAmount,
                                   ),
+                                  if (status == EvidenceProcessingStatus.done && extractedTotal == 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 10),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: () => _replaceFile(f.id),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: AppTheme.jade,
+                                                side: const BorderSide(color: AppTheme.jade),
+                                              ),
+                                              child: const Text('Replace'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: () => controller.removeFile(f.id),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: AppTheme.coral,
+                                                side: const BorderSide(color: AppTheme.coral),
+                                              ),
+                                              child: const Text('Remove'),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
