@@ -428,7 +428,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         const SizedBox(height: 10),
                         Text(
                           session.errorMessage!,
-                          style: textTheme.bodySmall?.copyWith(color: AppTheme.coral, fontWeight: FontWeight.w600),
+                          style: textTheme.bodySmall?.copyWith(
+                            color: session.errorMessage!.startsWith('\u2713')
+                                ? Colors.green.shade700
+                                : AppTheme.coral,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 14),

@@ -41,14 +41,17 @@ class HomeScreen extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.white.withValues(alpha: 0.14),
-                          child: Text(
-                            _initialsFor(displayName),
-                            style: textTheme.bodySmall?.copyWith(
-                              color: AppTheme.softWhite,
-                              fontWeight: FontWeight.w700,
+                        GestureDetector(
+                          onTap: () => _showAccountMenu(context, ref, session),
+                          child: CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.white.withValues(alpha: 0.14),
+                            child: Text(
+                              _initialsFor(displayName),
+                              style: textTheme.bodySmall?.copyWith(
+                                color: AppTheme.softWhite,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
@@ -260,6 +263,94 @@ class HomeScreen extends ConsumerWidget {
     if (lower.contains('juice') || lower.contains('sirap')) return Icons.local_drink_rounded;
     if (lower.contains('ayam') || lower.contains('chicken')) return Icons.lunch_dining_rounded;
     return Icons.restaurant_rounded;
+  }
+
+  void _showAccountMenu(BuildContext context, WidgetRef ref, SessionState session) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.warmSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppTheme.deepForest,
+                    child: Text(
+                      _initialsFor(session.displayName),
+                      style: Theme.of(ctx).textTheme.titleMedium?.copyWith(color: AppTheme.softWhite),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(session.displayName, style: Theme.of(ctx).textTheme.titleMedium),
+                        Text(session.businessName, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Colors.grey)),
+                        if (session.phoneOrEmail.isNotEmpty)
+                          Text(session.phoneOrEmail, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dCtx) => AlertDialog(
+                      title: const Text('Log out?'),
+                      content: const Text('You will need to log in again to access your account.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dCtx).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.of(dCtx).pop(true),
+                          child: const Text('Log out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true && context.mounted) {
+                    await ref.read(sessionProvider.notifier).logout();
+                    if (context.mounted) context.go('/login');
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded, color: AppTheme.coral),
+                label: const Text('Log out', style: TextStyle(color: AppTheme.coral)),
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.coral)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _showTapActions(BuildContext context, WidgetRef ref, dynamic item, int count) {

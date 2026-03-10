@@ -3,3 +3,19 @@ project_id = "pasar-memory-v2"
 [api]
 port = 54321
 external_url = "http://localhost:54321"
+
+[auth]
+# Allow new sign-ups
+enable_signup = true
+# Point to the Flutter web dev server
+site_url = "http://localhost:8080"
+# Accept redirects after email confirmation
+additional_redirect_urls = ["http://localhost:8080/**", "http://127.0.0.1:8080/**"]
+
+[auth.email]
+enable_signup = true
+# IMPORTANT: Set to false for local / hackathon dev so signUp immediately returns
+# an active session. This lets the profile be uploaded right away and allows
+# cross-device login without waiting for an email confirmation step.
+enable_confirmations = false
+double_confirm_changes = false

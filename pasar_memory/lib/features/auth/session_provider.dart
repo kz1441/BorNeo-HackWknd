@@ -112,6 +112,7 @@ class SessionController extends Notifier<SessionState> {
   static const _phoneToAccountPrefix = 'session.phoneToAccount';
   static const _isLoggedInKey = 'session.isLoggedIn';
   static const _menuSetupCompleteKey = 'session.menuSetupComplete';
+  static const _pendingProfileSyncPrefix = 'session.pendingProfileSync';
   int _mutationCounter = 0;
   static final RegExp _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
@@ -208,6 +209,35 @@ class SessionController extends Notifier<SessionState> {
           remoteProfile = await supabaseService.fetchProfile().timeout(const Duration(seconds: 3));
         } catch (_) {
           remoteProfile = null;
+        }
+
+        // Retry any profile sync that failed at registration time (e.g. email confirmation
+        // was still pending when signUp returned).
+        if (accountId.isNotEmpty) {
+          final pendingKey = '$_pendingProfileSyncPrefix.$accountId';
+          if (prefs.getBool(pendingKey) ?? false) {
+            final localName = prefs.getString(_scopedKey(_displayNameKey, accountId))?.trim() ?? '';
+            final localBiz = prefs.getString(_scopedKey(_businessNameKey, accountId))?.trim() ?? '';
+            final localType = prefs.getString(_scopedKey(_businessTypeKey, accountId))?.trim() ?? '';
+            final localLang = prefs.getString(_scopedKey(_preferredLanguageKey, accountId))?.trim() ?? 'English';
+            final localEmail = prefs.getString(_scopedKey(_accountAuthEmailKey, accountId))?.trim() ?? remoteUser.email ?? '';
+            if (localName.isNotEmpty && localBiz.isNotEmpty && localEmail.isNotEmpty) {
+              try {
+                await supabaseService.upsertProfile(
+                  displayName: localName,
+                  businessName: localBiz,
+                  businessType: localType.isEmpty ? 'Hawker' : localType,
+                  preferredLanguage: localLang,
+                  email: localEmail,
+                  phone: null,
+                ).timeout(const Duration(seconds: 5));
+                remoteProfile ??= await supabaseService.fetchProfile().timeout(const Duration(seconds: 3));
+                await prefs.remove(pendingKey);
+              } catch (e) {
+                debugPrint('SessionController._bootstrap: pending profile sync failed: $e');
+              }
+            }
+          }
         }
       }
 
@@ -329,14 +359,53 @@ class SessionController extends Notifier<SessionState> {
 
         accountId = authUser.id;
         identityValue = authUser.email ?? authEmail;
-        await supabaseService.upsertProfile(
-          displayName: displayName,
-          businessName: normalizedBusinessName,
-          businessType: normalizedBusinessType,
-          preferredLanguage: preferredLanguage,
-          email: authEmail,
-          phone: normalizedPhoneOrEmail.contains('@') ? null : normalizedPhoneOrEmail,
-        ).timeout(const Duration(seconds: 8));
+
+        // When Supabase email confirmation is DISABLED (recommended), signUp returns
+        // an active session immediately and we can upload the profile right away.
+        // When email confirmation IS enabled, there is no session yet — we store
+        // the data locally and show a clear message so the user knows to check email.
+        final hasActiveSession = authResponse.session != null;
+        if (!hasActiveSession) {
+          // No session: email confirmation is required.
+          // Save all registration data locally so the profile upload can be retried
+          // on the first successful login (on THIS device or any other).
+          await prefs.setString(_accountIdKey, accountId);
+          await prefs.setString(_displayNameKey, normalizedDisplayName);
+          await prefs.setString(_scopedKey(_displayNameKey, accountId), normalizedDisplayName);
+          await prefs.setString(_scopedKey(_businessNameKey, accountId), normalizedBusinessName);
+          await prefs.setString(_scopedKey(_businessTypeKey, accountId), normalizedBusinessType);
+          await prefs.setString(_scopedKey(_preferredLanguageKey, accountId), preferredLanguage);
+          await prefs.setString(_scopedKey(_accountAuthEmailKey, accountId), authEmail);
+          await prefs.setString(_phoneOrEmailKey, identityValue);
+          final phoneLookupE = _normalizePhoneKey(normalizedPhoneOrEmail);
+          if (phoneLookupE.isNotEmpty) {
+            await prefs.setString(_phoneToEmailKey(phoneLookupE), authEmail);
+            await prefs.setString(_phoneToAccountKey(phoneLookupE), accountId);
+          }
+          await prefs.setBool('$_pendingProfileSyncPrefix.$accountId', true);
+          state = state.copyWith(
+            isBusy: false,
+            errorMessage: '✓ Account created! Check your email ($authEmail) to confirm it, then log in.',
+          );
+          return;
+        }
+
+        try {
+          await supabaseService.upsertProfile(
+            displayName: displayName,
+            businessName: normalizedBusinessName,
+            businessType: normalizedBusinessType,
+            preferredLanguage: preferredLanguage,
+            email: authEmail,
+            phone: normalizedPhoneOrEmail.contains('@') ? null : normalizedPhoneOrEmail,
+          ).timeout(const Duration(seconds: 8));
+          // Profile saved — clear any stale pending flag.
+          await prefs.remove('$_pendingProfileSyncPrefix.$accountId');
+        } catch (e) {
+          // Non-fatal: Supabase auth user is created. Profile will be retried on next login.
+          debugPrint('SessionController.register: upsertProfile failed, will retry on login: $e');
+          await prefs.setBool('$_pendingProfileSyncPrefix.$accountId', true);
+        }
       }
 
       await prefs.setString(_displayNameKey, normalizedDisplayName);
@@ -376,7 +445,13 @@ class SessionController extends Notifier<SessionState> {
       return;
     } catch (e, st) {
       debugPrint('SessionController.register failed: $e\n$st');
-      state = state.copyWith(errorMessage: 'Could not create account.');
+      final msg = e.toString().toLowerCase();
+      final errorText = msg.contains('already registered') || msg.contains('user already')
+          ? 'This email is already registered. Please log in instead.'
+          : msg.contains('invalid email')
+              ? 'Please enter a valid email address.'
+              : 'Could not create account. Please try again.';
+      state = state.copyWith(errorMessage: errorText);
       return;
     } finally {
       if (state.isBusy) {
@@ -460,6 +535,32 @@ class SessionController extends Notifier<SessionState> {
           await prefs.setString(_phoneToEmailKey(phoneLookup), authEmail);
           await prefs.setString(_phoneToAccountKey(phoneLookup), accountId);
         }
+
+        // Retry pending profile upload if registration couldn't write it earlier
+        // (e.g. email confirmation was required at sign-up time).
+        final pendingKey = '$_pendingProfileSyncPrefix.$accountId';
+        if (prefs.getBool(pendingKey) ?? false) {
+          final localName = prefs.getString(_scopedKey(_displayNameKey, accountId))?.trim() ?? '';
+          final localBiz = prefs.getString(_scopedKey(_businessNameKey, accountId))?.trim() ?? '';
+          final localType = prefs.getString(_scopedKey(_businessTypeKey, accountId))?.trim() ?? '';
+          final localLang = prefs.getString(_scopedKey(_preferredLanguageKey, accountId))?.trim() ?? 'English';
+          final localPhone = _normalizePhoneKey(input);
+          if (localName.isNotEmpty && localBiz.isNotEmpty) {
+            try {
+              await supabaseService.upsertProfile(
+                displayName: localName,
+                businessName: localBiz,
+                businessType: localType.isEmpty ? 'Hawker' : localType,
+                preferredLanguage: localLang,
+                email: authEmail,
+                phone: localPhone.isNotEmpty ? localPhone : null,
+              ).timeout(const Duration(seconds: 8));
+              await prefs.remove(pendingKey);
+            } catch (e) {
+              debugPrint('SessionController.login: pending profile sync failed: $e');
+            }
+          }
+        }
       }
 
       if (!_hasStoredAccount(prefs, accountId)) {
@@ -477,8 +578,23 @@ class SessionController extends Notifier<SessionState> {
         }
 
         if (!_hasStoredAccount(prefs, accountId)) {
-          state = state.copyWith(errorMessage: 'No account found yet. Register first.');
-          return LoginTarget.register;
+          if (supabaseService.isConfigured && supabaseService.currentUser != null) {
+            // Supabase auth succeeded but no profile exists anywhere yet.
+            // This happens when: (a) logging in on a new device before the profile
+            // was ever synced, or (b) email confirmation was pending when the profile
+            // upload was first attempted. Allow login and redirect to menu-setup so
+            // the user can complete their profile — they have a valid Supabase account.
+            final fallbackName =
+                supabaseService.currentUser!.email?.split('@').first ?? 'User';
+            await prefs.setString(_accountIdKey, accountId);
+            await prefs.setString(_scopedKey(_displayNameKey, accountId), fallbackName);
+            await prefs.setString(_scopedKey(_businessNameKey, accountId), 'My Stall');
+            await prefs.setString(_scopedKey(_businessTypeKey, accountId), 'Hawker');
+            await prefs.setString(_scopedKey(_preferredLanguageKey, accountId), 'English');
+          } else {
+            state = state.copyWith(errorMessage: 'No account found. Please register first.');
+            return LoginTarget.register;
+          }
         }
       }
 
@@ -506,7 +622,9 @@ class SessionController extends Notifier<SessionState> {
         phoneOrEmail: identityValue,
         businessName: prefs.getString(_scopedKey(_businessNameKey, accountId)) ?? state.businessName,
         businessType: prefs.getString(_scopedKey(_businessTypeKey, accountId)) ?? state.businessType,
-        displayName: prefs.getString(_scopedKey(_displayNameKey, accountId)) ?? _resolvedDisplayName(
+        preferredLanguage: prefs.getString(_scopedKey(_preferredLanguageKey, accountId)) ?? state.preferredLanguage,
+        displayName: prefs.getString(_scopedKey(_displayNameKey, accountId)) ??
+            _resolvedDisplayName(
               prefs: prefs,
               accountId: accountId,
               fallback: state.displayName,
@@ -538,6 +656,23 @@ class SessionController extends Notifier<SessionState> {
 
   void setTotalTapCount(int value) {
     state = state.copyWith(totalTapCount: value);
+  }
+
+  Future<void> logout() async {
+    _mutationCounter++;
+    try {
+      final supabaseService = ref.read(supabaseAccountServiceProvider);
+      if (supabaseService.isConfigured) {
+        try {
+          await supabaseService.signOut();
+        } catch (_) {}
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_isLoggedInKey, false);
+      await prefs.remove(_accountIdKey);
+      await prefs.remove(_phoneOrEmailKey);
+    } catch (_) {}
+    state = const SessionState(isReady: true);
   }
 }
 

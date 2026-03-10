@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "pasar_memory (Supabase Cloud)",
+      "type": "dart",
+      "request": "launch",
+      "program": "pasar_memory/lib/main.dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://<your-project-ref>.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=<your-anon-key>",
+        "--web-port=8080",
+        "--web-hostname=0.0.0.0"
+      ],
+      "deviceId": "chrome"
+    },
+    {
+      "name": "pasar_memory (Local Supabase, same network)",
+      "type": "dart",
+      "request": "launch",
+      "program": "pasar_memory/lib/main.dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=http://<your-machine-ip>:54321",
+        "--dart-define=SUPABASE_ANON_KEY=<anon-key-from-supabase-status>",
+        "--web-port=8080",
+        "--web-hostname=0.0.0.0"
+      ],
+      "deviceId": "chrome"
+    },
+    {
+      "name": "pasar_memory (local only, fixed port)",
+      "type": "dart",
+      "request": "launch",
+      "program": "pasar_memory/lib/main.dart",
+      "args": ["--web-port=8080"],
+      "deviceId": "chrome"
+    }
+  ]
+}
