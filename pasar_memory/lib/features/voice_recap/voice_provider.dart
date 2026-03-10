@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../../models/menu_item.dart';
 import '../../services/recap_parser/gemini_recap_service.dart';
 import '../../services/recap_parser/menu_aware_parser.dart';
 import '../auth/session_provider.dart';
+import '../cash_entry/cash_entry_provider.dart';
 import '../selling/selling_provider.dart';
 
 /// Voice recording states
@@ -430,6 +432,7 @@ class VoiceController extends Notifier<VoiceState> {
         transcript: result.correctedTranscript ?? transcript,
       );
       _applyParsedItemsToSelling(finalRecap);
+      _applyParsedCash(finalRecap);
       return;
     } catch (_) {
       // Gemini unavailable (no internet, quota, etc.) — fall back to local parser
@@ -445,6 +448,7 @@ class VoiceController extends Notifier<VoiceState> {
         clearUnknownItems: true,
       );
       _applyParsedItemsToSelling(parsedRecap);
+      _applyParsedCash(parsedRecap);
     } catch (e) {
       state = state.copyWith(
         recordingState: VoiceRecordingState.error,
@@ -466,6 +470,20 @@ class VoiceController extends Notifier<VoiceState> {
       if (menuItem.id.isNotEmpty) {
         sellingController.updateCount(menuItem, item.quantity);
       }
+    }
+  }
+
+  void _applyParsedCash(ParsedRecap recap) {
+    final detectedCash = recap.cashMention?.amount;
+    if (detectedCash == null || detectedCash <= 0) {
+      return;
+    }
+
+    ref.read(spokenCashAmountProvider.notifier).set(detectedCash);
+
+    final cashState = ref.read(cashEntryProvider);
+    if (!cashState.isConfirmed) {
+      ref.read(cashEntryProvider.notifier).prefillFromVoice(detectedCash);
     }
   }
 

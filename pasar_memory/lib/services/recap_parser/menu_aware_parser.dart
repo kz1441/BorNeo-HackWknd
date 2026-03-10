@@ -154,23 +154,60 @@ class MenuAwareParser {
   /// Default language for parsing hints
   final String defaultLanguage;
 
-  // Common Malay number words
-  static const _malayNumbers = {
-    'satu': 1, 'dua': 2, 'tiga': 3, 'empat': 4, 'lima': 5,
-    'enam': 6, 'tujuh': 7, 'lapan': 8, 'sembilan': 9, 'sepuluh': 10,
-    'sebelas': 11, 'dua belas': 12, 'tiga belas': 13, 'empat belas': 14, 'lima belas': 15,
-    'dua puluh': 20, 'tiga puluh': 30, 'empat puluh': 40, 'lima puluh': 50,
-    'seratus': 100, 'dua ratus': 200, 'tiga ratus': 300,
+  static const Map<String, int> _unitWords = {
+    'satu': 1,
+    'dua': 2,
+    'tiga': 3,
+    'empat': 4,
+    'lima': 5,
+    'enam': 6,
+    'tujuh': 7,
+    'lapan': 8,
+    'sembilan': 9,
+    'sepuluh': 10,
+    'sebelas': 11,
+    'one': 1,
+    'two': 2,
+    'three': 3,
+    'four': 4,
+    'five': 5,
+    'six': 6,
+    'seven': 7,
+    'eight': 8,
+    'nine': 9,
+    'ten': 10,
+    'eleven': 11,
   };
 
-  // English number words (STT often transcribes spoken numbers as English words)
-  static const _englishNumbers = {
-    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-    'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-    'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
-    'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
-    'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50,
-    'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90,
+  static const Map<String, int> _tensWords = {
+    'dua puluh': 20,
+    'tiga puluh': 30,
+    'empat puluh': 40,
+    'lima puluh': 50,
+    'enam puluh': 60,
+    'tujuh puluh': 70,
+    'lapan puluh': 80,
+    'sembilan puluh': 90,
+    'twenty': 20,
+    'thirty': 30,
+    'forty': 40,
+    'fifty': 50,
+    'sixty': 60,
+    'seventy': 70,
+    'eighty': 80,
+    'ninety': 90,
+  };
+
+  static const Map<String, int> _hundredsWords = {
+    'seratus': 100,
+    'dua ratus': 200,
+    'tiga ratus': 300,
+    'empat ratus': 400,
+    'lima ratus': 500,
+    'enam ratus': 600,
+    'tujuh ratus': 700,
+    'lapan ratus': 800,
+    'sembilan ratus': 900,
     'hundred': 100,
   };
 
@@ -186,17 +223,17 @@ class MenuAwareParser {
     caseSensitive: false,
   );
 
-  // Cash keywords
   static final _cashKeywords = RegExp(
-    r'\b(cash|tunai|duit cash|duit dalam tangan|counted cash|kira cash|cash yang|cash ada|wang tunai)\b',
+    r'\b(cash|tunai|duit cash|duit dalam tangan|counted cash|kira cash|cash yang|cash ada|wang tunai|tunai ada|cash received|cash dapat)\b',
     caseSensitive: false,
   );
 
-  // Money amount patterns
   static final _amountPattern = RegExp(
     r'(?:rm\s*)?(\d+(?:\.\d{1,2})?)\s*(?:ringgit)?',
     caseSensitive: false,
   );
+
+  static final _wordTokenPattern = RegExp(r'[a-z0-9]+', caseSensitive: false);
 
   // Payment mode hints
   static final _paymentModePatterns = {
@@ -215,48 +252,43 @@ class MenuAwareParser {
     List<MenuItem> menuItems, {
     Map<String, List<String>>? aliases,
   }) {
-    final normalizedTranscript = transcript.toLowerCase();
+    final normalizedTranscript = _normalizeText(transcript);
     final detectedItems = <ParsedItemMention>[];
     final soldOutItems = <String>[];
 
-    // Build search terms map (item name -> item)
     final searchTerms = <String, MenuItem>{};
     for (final item in menuItems) {
-      searchTerms[item.name.toLowerCase()] = item;
-      // Add aliases if available
+      searchTerms[_normalizeText(item.name)] = item;
       final itemAliases = aliases?[item.id] ?? [];
       for (final alias in itemAliases) {
-        searchTerms[alias.toLowerCase()] = item;
+        final normalizedAlias = _normalizeText(alias);
+        if (normalizedAlias.isNotEmpty) {
+          searchTerms[normalizedAlias] = item;
+        }
       }
     }
 
-    // Find item mentions
     for (final entry in searchTerms.entries) {
       final term = entry.key;
       final item = entry.value;
+      if (term.isEmpty) continue;
 
-      // Skip if already detected this item
       if (detectedItems.any((d) => d.menuItemId == item.id)) continue;
 
-      final termIndex = normalizedTranscript.indexOf(term);
-      if (termIndex == -1) continue;
+      final matches = _findTermMatches(normalizedTranscript, term);
+      if (matches.isEmpty) continue;
 
-      // Extract surrounding context (50 chars before and after)
-      final start = (termIndex - 50).clamp(0, normalizedTranscript.length);
-      final end = (termIndex + term.length + 50).clamp(0, normalizedTranscript.length);
-      final context = normalizedTranscript.substring(start, end);
+      final bestMatch = matches.first;
+      final context = _contextWindow(normalizedTranscript, bestMatch.$1, bestMatch.$2, 50);
 
-      // Check if sold out
       final isSoldOut = _soldOutIndicators.hasMatch(context);
       if (isSoldOut) {
         soldOutItems.add(item.name);
       }
 
-      // Try to extract quantity; default to 1 if none found
-      final quantityResult = _extractQuantity(context, term);
+      final quantityResult = _extractQuantityNearTerm(normalizedTranscript, bestMatch.$1, bestMatch.$2);
       final isApproximate = _approximateIndicators.hasMatch(context);
 
-      // Always add detected item — quantity defaults to 1 if not explicitly mentioned
       detectedItems.add(ParsedItemMention(
         menuItemId: item.id,
         menuItemName: item.name,
@@ -268,10 +300,8 @@ class MenuAwareParser {
       ));
     }
 
-    // Extract cash mention
     final cashMention = _extractCashMention(normalizedTranscript);
 
-    // Detect payment mode hint
     String? paymentModeHint;
     for (final entry in _paymentModePatterns.entries) {
       if (entry.value.hasMatch(normalizedTranscript)) {
@@ -280,7 +310,6 @@ class MenuAwareParser {
       }
     }
 
-    // Determine overall confidence
     final overallConfidence = _determineOverallConfidence(detectedItems, cashMention);
 
     return ParsedRecap(
@@ -293,86 +322,235 @@ class MenuAwareParser {
     );
   }
 
-  /// Extract quantity from context around an item mention.
-  /// ORDERING RULE: quantity must appear AFTER the item name, never before.
-  int? _extractQuantity(String context, String itemName) {
-    // Find where the item name ends within the context string
-    final itemIndex = context.indexOf(itemName);
-    if (itemIndex == -1) return null;
+  List<(int, int)> _findTermMatches(String text, String term) {
+    final escaped = RegExp.escape(term);
+    final regex = RegExp('(^|\\s)$escaped(\\s|\$)', caseSensitive: false);
+    final matches = <(int, int)>[];
+    for (final match in regex.allMatches(text)) {
+      final start = match.start + (match.group(1)?.length ?? 0);
+      final end = start + term.length;
+      matches.add((start, end));
+    }
 
-    // Only look at the substring AFTER the item name
-    final afterItem = context.substring(itemIndex + itemName.length);
-
-    // Try digit patterns after item name
-    final digitMatches = RegExp(r'\b(\d+)\b').allMatches(afterItem);
-    for (final match in digitMatches) {
-      final value = int.tryParse(match.group(1) ?? '');
-      if (value != null && value > 0 && value < 500) {
-        return value;
+    if (matches.isEmpty && enableFuzzyMatching) {
+      final idx = text.indexOf(term);
+      if (idx >= 0) {
+        matches.add((idx, idx + term.length));
       }
     }
 
-    // Try Malay number words after item name
-    for (final entry in _malayNumbers.entries) {
-      if (RegExp(r'\b' + RegExp.escape(entry.key) + r'\b').hasMatch(afterItem)) {
-        return entry.value;
+    return matches;
+  }
+
+  String _normalizeText(String raw) {
+    final lowered = raw.toLowerCase();
+    return lowered.replaceAll(RegExp(r'[^a-z0-9\.\s]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _contextWindow(String text, int start, int end, int padding) {
+    final left = (start - padding).clamp(0, text.length);
+    final right = (end + padding).clamp(0, text.length);
+    return text.substring(left, right);
+  }
+
+  int? _extractQuantityNearTerm(String transcript, int termStart, int termEnd) {
+    // Extract text BEFORE the item term (up to 15 chars before termStart)
+    final beforeStart = (termStart - 15).clamp(0, transcript.length);
+    final before = transcript.substring(beforeStart, termStart);
+    
+    // Extract text AFTER the item term (up to 15 chars after termEnd)
+    final afterEnd = (termEnd + 15).clamp(0, transcript.length);
+    final after = transcript.substring(termEnd, afterEnd);
+
+    final beforeValue = _extractLastSmallNumber(before);
+    final afterValue = _extractFirstSmallNumber(after);
+
+    // Check if extracted numbers are near cash keywords - if so, reject them
+    if (beforeValue != null && _isNearCashKeyword(transcript, termStart - 15, termStart, beforeValue)) {
+      // beforeValue is contaminated by cash mention, skip it
+      return afterValue != null && !_isNearCashKeyword(transcript, termEnd, termEnd + 15, afterValue) 
+        ? afterValue 
+        : null;
+    }
+    if (afterValue != null && _isNearCashKeyword(transcript, termEnd, termEnd + 15, afterValue)) {
+      // afterValue is contaminated by cash mention, use beforeValue
+      return beforeValue;
+    }
+
+    // Prefer the value immediately before the term (like "6 nasi kukus")
+    // over the value after (like "nasi kukus 6")
+    if (beforeValue != null && afterValue != null) {
+      return beforeValue;
+    }
+    return beforeValue ?? afterValue;
+  }
+
+  int? _extractLastSmallNumber(String text) {
+    final tokenMatches = _wordTokenPattern.allMatches(text).toList(growable: false);
+    for (var i = tokenMatches.length - 1; i >= 0; i--) {
+      final parsed = _parseNumberishTokens(tokenMatches, i, reverse: true);
+      if (parsed != null && parsed > 0 && parsed <= 500) {
+        return parsed;
+      }
+    }
+    return null;
+  }
+
+  bool _isNearCashKeyword(String transcript, int start, int end, int value) {
+    // Small quantities (< 50) are very unlikely to be cash amounts
+    // Even if they appear near cash keywords, they're probably item quantities
+    if (value < 50) return false;
+    
+    final snippet = transcript.substring(
+      start.clamp(0, transcript.length),
+      end.clamp(0, transcript.length),
+    );
+    
+    // Check if this snippet contains cash keywords
+    final cashMatch = _cashKeywords.firstMatch(snippet);
+    if (cashMatch == null) return false;
+    
+    // Find the position of the value (as string) in the snippet
+    final valueStr = value.toString();
+    final valueIndex = snippet.indexOf(valueStr);
+    if (valueIndex < 0) return false;
+    
+    // Get the distance between the number and the cash keyword
+    final cashStart = cashMatch.start;
+    final cashEnd = cashMatch.end;
+    final valueEnd = valueIndex + valueStr.length;
+    
+    // Consider contaminated if:
+    // 1. Number appears within 8 chars AFTER cash keyword (likely "cash 200")
+    // 2. Cash keyword appears within 8 chars AFTER number (likely "200 cash" or "200 tunai")
+    final numberAfterCash = valueIndex >= cashEnd && valueIndex - cashEnd <= 8;
+    final cashAfterNumber = cashStart >= valueEnd && cashStart - valueEnd <= 8;
+    
+    return numberAfterCash || cashAfterNumber;
+  }
+
+  int? _extractFirstSmallNumber(String text) {
+    final tokenMatches = _wordTokenPattern.allMatches(text).toList(growable: false);
+    for (var i = 0; i < tokenMatches.length; i++) {
+      final parsed = _parseNumberishTokens(tokenMatches, i);
+      if (parsed != null && parsed > 0 && parsed <= 500) {
+        return parsed;
+      }
+    }
+    return null;
+  }
+
+  int? _parseNumberishTokens(List<RegExpMatch> tokens, int index, {bool reverse = false}) {
+    final token = tokens[index].group(0) ?? '';
+    final directInt = int.tryParse(token);
+    if (directInt != null) return directInt;
+
+    final maxLen = 3;
+    for (var len = maxLen; len >= 1; len--) {
+      int start;
+      int end;
+      if (reverse) {
+        start = index - len + 1;
+        end = index;
+      } else {
+        start = index;
+        end = index + len - 1;
+      }
+      if (start < 0 || end >= tokens.length) continue;
+
+      final phrase = <String>[];
+      for (var i = start; i <= end; i++) {
+        phrase.add(tokens[i].group(0) ?? '');
+      }
+
+      final parsed = _parseNumberPhrase(phrase);
+      if (parsed != null) return parsed;
+    }
+
+    return null;
+  }
+
+  int? _parseNumberPhrase(List<String> words) {
+    if (words.isEmpty) return null;
+    final joined = words.join(' ');
+    if (_hundredsWords.containsKey(joined)) return _hundredsWords[joined];
+    if (_tensWords.containsKey(joined)) return _tensWords[joined];
+    if (_unitWords.containsKey(joined)) return _unitWords[joined];
+
+    if (words.length == 2) {
+      final first = words[0];
+      final second = words[1];
+      if (_tensWords.containsKey(first) && _unitWords.containsKey(second)) {
+        return (_tensWords[first] ?? 0) + (_unitWords[second] ?? 0);
+      }
+      if (_unitWords.containsKey(first) && second == 'hundred') {
+        return (_unitWords[first] ?? 0) * 100;
+      }
+      if (_unitWords.containsKey(first) && second == 'ratus') {
+        return (_unitWords[first] ?? 0) * 100;
       }
     }
 
-    // Try English number words after item name
-    for (final entry in _englishNumbers.entries) {
-      if (RegExp(r'\b' + RegExp.escape(entry.key) + r'\b').hasMatch(afterItem)) {
-        return entry.value;
+    if (words.length == 3) {
+      final first = words[0];
+      final second = words[1];
+      final third = words[2];
+      if (_unitWords.containsKey(first) && (second == 'hundred' || second == 'ratus') && _unitWords.containsKey(third)) {
+        return (_unitWords[first] ?? 0) * 100 + (_unitWords[third] ?? 0);
+      }
+      if (_unitWords.containsKey(first) && (second == 'hundred' || second == 'ratus') && _tensWords.containsKey(third)) {
+        return (_unitWords[first] ?? 0) * 100 + (_tensWords[third] ?? 0);
       }
     }
 
     return null;
   }
 
-  /// Extract cash mention from transcript
   ParsedCashMention? _extractCashMention(String transcript) {
-    // Look for cash keyword followed by amount
     if (!_cashKeywords.hasMatch(transcript)) return null;
 
-    // Find the cash context
-    final cashMatch = _cashKeywords.firstMatch(transcript);
-    if (cashMatch == null) return null;
+    ParsedCashMention? best;
+    for (final cashMatch in _cashKeywords.allMatches(transcript)) {
+      final around = _contextWindow(transcript, cashMatch.start, cashMatch.end, 28);
+      final amount = _extractBestMoneyAmount(around);
+      if (amount == null || amount <= 0) continue;
 
-    // Look for amount after the cash keyword
-    final afterCash = transcript.substring(cashMatch.end);
-    final amountMatch = _amountPattern.firstMatch(afterCash);
+      final isApproximate = _approximateIndicators.hasMatch(around);
+      final current = ParsedCashMention(
+        amount: amount,
+        confidence: isApproximate ? ParsedFieldConfidence.medium : ParsedFieldConfidence.high,
+        rawMention: around,
+        isApproximate: isApproximate,
+      );
 
-    if (amountMatch != null) {
-      final amount = double.tryParse(amountMatch.group(1) ?? '');
-      if (amount != null && amount > 0) {
-        final isApproximate = _approximateIndicators.hasMatch(
-          transcript.substring(
-            (cashMatch.start - 30).clamp(0, transcript.length),
-            (amountMatch.end + cashMatch.end).clamp(0, transcript.length),
-          ),
-        );
-
-        return ParsedCashMention(
-          amount: amount,
-          confidence: isApproximate ? ParsedFieldConfidence.medium : ParsedFieldConfidence.high,
-          rawMention: transcript.substring(
-            cashMatch.start,
-            (amountMatch.end + cashMatch.end).clamp(0, transcript.length),
-          ),
-          isApproximate: isApproximate,
-        );
+      if (best == null || current.amount > best.amount) {
+        best = current;
       }
     }
 
-    // Try Malay number patterns for cash
-    for (final entry in _malayNumbers.entries) {
-      if (afterCash.contains(entry.key)) {
-        return ParsedCashMention(
-          amount: entry.value.toDouble(),
-          confidence: ParsedFieldConfidence.medium,
-          rawMention: '${cashMatch.group(0)} ${entry.key}',
-          isApproximate: true,
-        );
+    return best;
+  }
+
+  double? _extractBestMoneyAmount(String text) {
+    final numericMatches = _amountPattern.allMatches(text).toList(growable: false);
+    if (numericMatches.isNotEmpty) {
+      double? best;
+      for (final match in numericMatches) {
+        final parsed = double.tryParse((match.group(1) ?? '').trim());
+        if (parsed == null) continue;
+        if (parsed <= 0) continue;
+        if (best == null || parsed > best) {
+          best = parsed;
+        }
+      }
+      if (best != null) return best;
+    }
+
+    final wordTokens = _wordTokenPattern.allMatches(text).toList(growable: false);
+    for (var i = 0; i < wordTokens.length; i++) {
+      final parsed = _parseNumberishTokens(wordTokens, i);
+      if (parsed != null && parsed > 0) {
+        return parsed.toDouble();
       }
     }
 
