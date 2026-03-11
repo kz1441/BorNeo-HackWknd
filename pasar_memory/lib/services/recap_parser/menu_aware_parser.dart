@@ -550,10 +550,21 @@ class MenuAwareParser {
 
     ParsedCashMention? best;
     for (final cashMatch in _cashKeywords.allMatches(transcript)) {
-      final around = _contextWindow(transcript, cashMatch.start, cashMatch.end, 28);
-      final amount = _extractBestMoneyAmount(around);
+      // Prefer the number immediately AFTER the cash keyword (e.g. "cash 1 nasi 6").
+      // Only fall back to immediately BEFORE if nothing follows.
+      final afterEnd = (cashMatch.end + 15).clamp(0, transcript.length);
+      final afterText = transcript.substring(cashMatch.end, afterEnd);
+      double? amount = _extractFirstMoneyAmount(afterText);
+
+      if (amount == null || amount <= 0) {
+        final beforeStart = (cashMatch.start - 15).clamp(0, transcript.length);
+        final beforeText = transcript.substring(beforeStart, cashMatch.start);
+        amount = _extractLastMoneyAmount(beforeText);
+      }
+
       if (amount == null || amount <= 0) continue;
 
+      final around = _contextWindow(transcript, cashMatch.start, cashMatch.end, 28);
       final isApproximate = _approximateIndicators.hasMatch(around);
       final current = ParsedCashMention(
         amount: amount,
@@ -593,6 +604,35 @@ class MenuAwareParser {
       }
     }
 
+    return null;
+  }
+
+  /// Returns the first valid amount in [text] (left-to-right).
+  double? _extractFirstMoneyAmount(String text) {
+    for (final match in _amountPattern.allMatches(text)) {
+      final parsed = double.tryParse((match.group(1) ?? '').trim());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    final wordTokens = _wordTokenPattern.allMatches(text).toList(growable: false);
+    for (var i = 0; i < wordTokens.length; i++) {
+      final parsed = _parseNumberishTokens(wordTokens, i);
+      if (parsed != null && parsed > 0) return parsed.toDouble();
+    }
+    return null;
+  }
+
+  /// Returns the last valid amount in [text] (right-to-left).
+  double? _extractLastMoneyAmount(String text) {
+    final numericMatches = _amountPattern.allMatches(text).toList(growable: false);
+    for (var i = numericMatches.length - 1; i >= 0; i--) {
+      final parsed = double.tryParse((numericMatches[i].group(1) ?? '').trim());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    final wordTokens = _wordTokenPattern.allMatches(text).toList(growable: false);
+    for (var i = wordTokens.length - 1; i >= 0; i--) {
+      final parsed = _parseNumberishTokens(wordTokens, i, reverse: true);
+      if (parsed != null && parsed > 0) return parsed.toDouble();
+    }
     return null;
   }
 
