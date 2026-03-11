@@ -110,6 +110,15 @@ class _VoiceRecapScreenState extends ConsumerState<VoiceRecapScreen>
                     ),
                     const SizedBox(height: 8),
                     const ProgressStepper(currentStep: 2),
+                    const SizedBox(height: 10),
+                    Text(
+                      'The voice recap may not be perfect. Please use the Manual Text Input to correct any mistakes.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.softWhite,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
